@@ -1,134 +1,224 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Plugin, Editor, PluginSettingTab, App, Setting } from "obsidian";
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+interface ListMarkerSettings {
+	marker: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+const DEFAULT_SETTINGS: ListMarkerSettings = {
+	marker: "[<<<]",
+};
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class ListMarkerPlugin extends Plugin {
+	settings: ListMarkerSettings = DEFAULT_SETTINGS;
 
 	async onload() {
 		await this.loadSettings();
+		this.addSettingTab(new ListMarkerSettingTab(this.app, this));
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
+			id: "move-marker-up",
+			name: "Move marker up",
+			hotkeys: [{ modifiers: ["Alt"], key: "ArrowUp" }],
+			editorCallback: (editor: Editor) => this.moveMarker(editor, -1),
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
+
 		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
+			id: "move-marker-down",
+			name: "Move marker down",
+			hotkeys: [{ modifiers: ["Alt"], key: "ArrowDown" }],
+			editorCallback: (editor: Editor) => this.moveMarker(editor, 1),
 		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
+
 		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
+			id: "toggle-marker",
+			name: "Toggle marker on current line",
+			hotkeys: [{ modifiers: ["Alt"], key: "[" }],
+			editorCallback: (editor: Editor) => this.toggleMarker(editor),
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
-
-	onunload() {
-
+		this.registerEvent(
+			this.app.workspace.on("file-open", () => {
+				const editor = this.app.workspace.activeEditor?.editor;
+				if (editor) this.initializeMarker(editor);
+			})
+		);
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	initializeMarker(editor: Editor) {
+		const totalLines = editor.lineCount();
+		for (let i = 0; i < totalLines; i++) {
+			const line = editor.getLine(i);
+			if (line.includes(this.settings.marker)) {
+				editor.setLine(i, line.replace(` ${this.settings.marker}`, ""));
+			}
+		}
+
+		for (let i = 0; i < totalLines; i++) {
+			const line = editor.getLine(i);
+			if (this.isListItem(line)) {
+				editor.setLine(i, line + ` ${this.settings.marker}`);
+				const newText = editor.getLine(i);
+				const positionBeforeMarker =
+					newText.length - this.settings.marker.length - 1;
+				editor.setCursor({ line: i, ch: positionBeforeMarker });
+				break;
+			}
+		}
+	}
+
+	isListItem(line: string): boolean {
+		return /^\s*[-*+] /.test(line) || /^\s*\d+\. /.test(line);
+	}
+
+	getIndentLevel(line: string): number {
+		const match = line.match(/^\s*/);
+		return match ? match[0].length : 0;
+	}
+
+	toggleMarker(editor: Editor) {
+		const cursor = editor.getCursor();
+		const currentLine = cursor.line;
+		let currentText = editor.getLine(currentLine);
+
+		const totalLines = editor.lineCount();
+		for (let i = 0; i < totalLines; i++) {
+			const line = editor.getLine(i);
+			if (line.includes(this.settings.marker)) {
+				editor.setLine(i, line.replace(` ${this.settings.marker}`, ""));
+			}
+		}
+
+		if (currentText.endsWith(` ${this.settings.marker}`)) {
+			currentText = currentText.replace(` ${this.settings.marker}`, "");
+			editor.setLine(currentLine, currentText);
+		} else {
+			currentText = currentText + ` ${this.settings.marker}`;
+			editor.setLine(currentLine, currentText);
+		}
+
+		const newText = editor.getLine(currentLine);
+		const positionBeforeMarker =
+			newText.length -
+			(newText.endsWith(this.settings.marker)
+				? this.settings.marker.length + 1
+				: 0);
+		editor.setCursor({ line: currentLine, ch: positionBeforeMarker });
+	}
+
+	moveMarker(editor: Editor, direction: number) {
+		const cursor = editor.getCursor();
+		let currentLine = cursor.line;
+		let currentText = editor.getLine(currentLine);
+
+		if (!currentText.includes(this.settings.marker)) {
+			return; // Если на текущей строке нет маркера, ничего не делаем
+		}
+
+		editor.setLine(
+			currentLine,
+			currentText.replace(` ${this.settings.marker}`, "")
+		);
+
+		let newLine = currentLine;
+		let found = false;
+		const totalLines = editor.lineCount();
+		const currentIndent = this.getIndentLevel(currentText);
+
+		while (!found) {
+			newLine += direction;
+			if (newLine < 0 || newLine >= totalLines) break;
+
+			const lineText = editor.getLine(newLine);
+			if (this.isListItem(lineText)) {
+				const newIndent = this.getIndentLevel(lineText);
+				if (direction > 0) {
+					if (
+						newIndent <= currentIndent ||
+						(newIndent > currentIndent &&
+							newLine === currentLine + 1)
+					) {
+						found = true;
+					}
+				} else {
+					if (
+						newIndent <= currentIndent ||
+						(newIndent > currentIndent &&
+							newLine === currentLine - 1)
+					) {
+						found = true;
+					}
+				}
+			}
+		}
+
+		if (found) {
+			const newText = editor.getLine(newLine);
+			editor.setLine(newLine, newText + ` ${this.settings.marker}`);
+			const positionBeforeMarker = newText.length;
+			editor.setCursor({ line: newLine, ch: positionBeforeMarker });
+		} else {
+			// Если подходящий элемент не найден, возвращаем маркер на место
+			editor.setLine(currentLine, currentText);
+			const positionBeforeMarker =
+				currentText.length - this.settings.marker.length - 1;
+			editor.setCursor({ line: currentLine, ch: positionBeforeMarker });
+		}
+	}
+
+	onunload() {
+		const editor = this.app.workspace.activeEditor?.editor;
+		if (editor) {
+			const totalLines = editor.lineCount();
+			for (let i = 0; i < totalLines; i++) {
+				const line = editor.getLine(i);
+				if (line.includes(this.settings.marker)) {
+					editor.setLine(
+						i,
+						line.replace(` ${this.settings.marker}`, "")
+					);
+				}
+			}
+		}
+	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+class ListMarkerSettingTab extends PluginSettingTab {
+	plugin: ListMarkerPlugin;
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: ListMarkerPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName("Marker text")
+			.setDesc("The text to use as the marker for list items.")
+			.addText((text) =>
+				text
+					.setPlaceholder("[<<<]")
+					.setValue(this.plugin.settings.marker)
+					.onChange(async (value) => {
+						this.plugin.settings.marker =
+							value || DEFAULT_SETTINGS.marker;
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 }
