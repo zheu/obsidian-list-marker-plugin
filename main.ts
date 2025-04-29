@@ -57,23 +57,36 @@ export default class ListMarkerPlugin extends Plugin {
 	}
 
 	initializeMarker(editor: Editor) {
+		// Check if there is already a marker in the file
 		const totalLines = editor.lineCount();
+		let markerExists = false;
 		for (let i = 0; i < totalLines; i++) {
 			const line = editor.getLine(i);
 			if (line.includes(this.settings.marker)) {
-				editor.setLine(i, line.replace(` ${this.settings.marker}`, ""));
+				markerExists = true;
+				break;
 			}
 		}
 
-		for (let i = 0; i < totalLines; i++) {
-			const line = editor.getLine(i);
-			if (this.isListItem(line)) {
-				editor.setLine(i, line + ` ${this.settings.marker}`);
-				const newText = editor.getLine(i);
-				const positionBeforeMarker =
-					newText.length - this.settings.marker.length - 1;
-				editor.setCursor({ line: i, ch: positionBeforeMarker });
-				break;
+		// If a marker exists, ensure only one marker is present
+		if (markerExists) {
+			let markerAdded = false;
+			for (let i = 0; i < totalLines; i++) {
+				const line = editor.getLine(i);
+				if (line.includes(this.settings.marker)) {
+					if (!markerAdded && this.isListItem(line)) {
+						markerAdded = true;
+						const newText = editor.getLine(i);
+						const positionBeforeMarker =
+							newText.length - this.settings.marker.length - 1;
+						editor.setCursor({ line: i, ch: positionBeforeMarker });
+					} else {
+						editor.setLine(
+							i,
+							line.replace(` ${this.settings.marker}`, "")
+						);
+					}
+				}
 			}
 		}
 	}
@@ -92,6 +105,7 @@ export default class ListMarkerPlugin extends Plugin {
 		const currentLine = cursor.line;
 		let currentText = editor.getLine(currentLine);
 
+		// Remove marker from all other lines
 		const totalLines = editor.lineCount();
 		for (let i = 0; i < totalLines; i++) {
 			const line = editor.getLine(i);
@@ -100,6 +114,7 @@ export default class ListMarkerPlugin extends Plugin {
 			}
 		}
 
+		// Toggle marker on the current line
 		if (currentText.endsWith(` ${this.settings.marker}`)) {
 			currentText = currentText.replace(` ${this.settings.marker}`, "");
 			editor.setLine(currentLine, currentText);
@@ -108,6 +123,7 @@ export default class ListMarkerPlugin extends Plugin {
 			editor.setLine(currentLine, currentText);
 		}
 
+		// Set cursor position before the marker (or where it was)
 		const newText = editor.getLine(currentLine);
 		const positionBeforeMarker =
 			newText.length -
@@ -122,8 +138,9 @@ export default class ListMarkerPlugin extends Plugin {
 		let currentLine = cursor.line;
 		let currentText = editor.getLine(currentLine);
 
+		// Do nothing if there is no marker on the current line
 		if (!currentText.includes(this.settings.marker)) {
-			return; // Если на текущей строке нет маркера, ничего не делаем
+			return;
 		}
 
 		editor.setLine(
@@ -169,7 +186,7 @@ export default class ListMarkerPlugin extends Plugin {
 			const positionBeforeMarker = newText.length;
 			editor.setCursor({ line: newLine, ch: positionBeforeMarker });
 		} else {
-			// Если подходящий элемент не найден, возвращаем маркер на место
+			// If no suitable line is found, restore the marker on the current line
 			editor.setLine(currentLine, currentText);
 			const positionBeforeMarker =
 				currentText.length - this.settings.marker.length - 1;
