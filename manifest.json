@@ -1,7 +1,7 @@
 {
 	"id": "list-marker",
 	"name": "List Marker",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "Adds a marker [<<<] to the current list item and allows moving it with Alt+ArrowUp/ArrowDown.",
 	"author": "Your Name",

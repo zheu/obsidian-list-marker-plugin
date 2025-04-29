@@ -1,6 +1,6 @@
 {
 	"name": "list-marker",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Obsidian plugin to manage a marker in lists",
 	"main": "main.js",
 	"scripts": {
